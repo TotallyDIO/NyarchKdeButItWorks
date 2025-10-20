@@ -1,12 +1,23 @@
 #!/bin/bash
 
-# Revision: 25.08.16
+# Revision: 25.05.02
 # (GNU/General Public License version 3.0)
 # by eznix (https://sourceforge.net/projects/ezarch/)
+# This script is also modified by Nyarch Linux developers
 
 # ----------------------------------------
 # Define Variables
 # ----------------------------------------
+
+LCLST="en_US"
+# Format is language_COUNTRY where language is lower case two letter code
+# and country is upper case two letter code, separated with an underscore
+
+KEYMP="us"
+# Use lower case two letter country code
+
+KEYMOD="pc105"
+# pc105 and pc104 are modern standards, all others need to be researched
 
 MYUSERNM="live"
 # use all lowercase letters only
@@ -17,7 +28,7 @@ MYUSRPASSWD="live"
 RTPASSWD="toor"
 # Pick a root password
 
-MYHOSTNM="ezarcher"
+MYHOSTNM="nyarchlinux"
 # Pick a hostname for the machine
 
 # ----------------------------------------
@@ -81,7 +92,7 @@ rm -r /opt/ezrepo
 # Remove auto-login, cloud-init, hyper-v, iwd, sshd, & vmware services
 rmunitsd () {
 rm -r ./ezreleng/airootfs/etc/systemd/system/cloud-init.target.wants
-rm -r ./ezreleng/airootfs/etc/systemd/system/getty@tty1.service.d
+# rm -r ./ezreleng/airootfs/etc/systemd/system/getty@tty1.service.d
 rm ./ezreleng/airootfs/etc/systemd/system/multi-user.target.wants/hv_fcopy_daemon.service
 rm ./ezreleng/airootfs/etc/systemd/system/multi-user.target.wants/hv_kvp_daemon.service
 rm ./ezreleng/airootfs/etc/systemd/system/multi-user.target.wants/hv_vss_daemon.service
@@ -89,6 +100,16 @@ rm ./ezreleng/airootfs/etc/systemd/system/multi-user.target.wants/vmware-vmblock
 rm ./ezreleng/airootfs/etc/systemd/system/multi-user.target.wants/vmtoolsd.service
 rm ./ezreleng/airootfs/etc/systemd/system/multi-user.target.wants/sshd.service
 rm ./ezreleng/airootfs/etc/systemd/system/multi-user.target.wants/iwd.service
+}
+
+# Remove unwanted desktop files
+rmbloatdesktop () {
+rm -rf ./ezreleng/airootfs/usr/share/applications/cmake-gui.desktop
+rm -rf ./ezreleng/airootfs/usr/share/applications/bvnc.desktop
+rm -rf ./ezreleng/airootfs/usr/share/applications/avahi-discover.desktop
+rm -rf ./ezreleng/airootfs/usr/share/applications/stoken-gui.desktop
+rm -rf ./ezreleng/airootfs/usr/share/applications/stoken-gui-small.desktop
+rm -rf ./ezreleng/airootfs/usr/share/applications/qv4l2.desktop
 }
 
 # Add cups, haveged, NetworkManager, & sddm systemd links
@@ -106,7 +127,7 @@ ln -sf /usr/lib/systemd/system/haveged.service ./ezreleng/airootfs/etc/systemd/s
 ln -sf /usr/lib/systemd/system/cups.service ./ezreleng/airootfs/etc/systemd/system/printer.target.wants/cups.service
 ln -sf /usr/lib/systemd/system/cups.socket ./ezreleng/airootfs/etc/systemd/system/sockets.target.wants/cups.socket
 ln -sf /usr/lib/systemd/system/cups.path ./ezreleng/airootfs/etc/systemd/system/multi-user.target.wants/cups.path
-ln -sf /usr/lib/systemd/system/sddm.service ./ezreleng/airootfs/etc/systemd/system/display-manager.service
+ln -sf /usr/lib/systemd/system/gdm.service ./ezreleng/airootfs/etc/systemd/system/display-manager.service
 }
 
 # Copy files to customize the ISO
@@ -121,7 +142,10 @@ cp -r etc/ ./ezreleng/airootfs/
 cp -r opt/ ./ezreleng/airootfs/
 cp -r usr/ ./ezreleng/airootfs/
 mkdir -p ./ezreleng/airootfs/etc/skel
+mkdir -p ./ezreleng/airootfs/var/lib/
+#cp -r /var/lib/flatpak/ ./ezreleng/airootfs/var/lib/flatpak
 ln -sf /usr/share/ezarcher ./ezreleng/airootfs/etc/skel/ezarcher
+cp customize_airootfs.sh ./ezreleng/airootfs/root/customize_airootfs.sh
 }
 
 # Set hostname
@@ -160,10 +184,10 @@ users:x:985:"${MYUSERNM}"
 
 # Create shadow file
 crtshadow () {
-user_hash=$(openssl passwd -6 "${MYUSRPASSWD}")
+usr_hash=$(openssl passwd -6 "${MYUSRPASSWD}")
 root_hash=$(openssl passwd -6 "${RTPASSWD}")
 echo "root:"${root_hash}":14871::::::
-"${MYUSERNM}":"${user_hash}":14871::::::" > ./ezreleng/airootfs/etc/shadow
+"${MYUSERNM}":"${usr_hash}":14871::::::" > ./ezreleng/airootfs/etc/shadow
 }
 
 # create gshadow file
@@ -188,6 +212,32 @@ sambashare:!*::"${MYUSERNM}"
 "${MYUSERNM}":!*::" > ./ezreleng/airootfs/etc/gshadow
 }
 
+# Set the keyboard layout
+setkeylayout () {
+echo "KEYMAP="${KEYMP}"" > ./ezreleng/airootfs/etc/vconsole.conf
+}
+
+# Create 00-keyboard.conf file
+crtkeyboard () {
+mkdir -p ./ezreleng/airootfs/etc/X11/xorg.conf.d
+echo "Section \"InputClass\"
+        Identifier \"system-keyboard\"
+        MatchIsKeyboard \"on\"
+        Option \"XkbLayout\" \""${KEYMP}"\"
+        Option \"XkbModel\" \""${KEYMOD}"\"
+EndSection" > ./ezreleng/airootfs/etc/X11/xorg.conf.d/00-keyboard.conf
+}
+
+# Set and fix locale.conf, locale.gen, and keyboard
+crtlocalec () {
+sed -i "s/pc105/"${KEYMOD}"/g" ./ezreleng/airootfs/etc/default/keyboard
+sed -i "s/us/"${KEYMP}"/g" ./ezreleng/airootfs/etc/default/keyboard
+sed -i "s/en_US/"${LCLST}"/g" ./ezreleng/airootfs/etc/default/locale
+sed -i "s/en_US/"${LCLST}"/g" ./ezreleng/airootfs/etc/locale.conf
+#echo ""${LCLST}".UTF-8 UTF-8" > ./ezreleng/airootfs/etc/locale.gen
+#echo "C.UTF-8 UTF-8" >> ./ezreleng/airootfs/etc/locale.gen
+}
+
 # Start mkarchiso
 runmkarchiso () {
 mkarchiso -v -w ./work -o ./out ./ezreleng
@@ -205,12 +255,16 @@ cpezreleng
 addnmlinks
 cpezrepo
 rmunitsd
+rmbloatdesktop
 cpmyfiles
 sethostname
 crtpasswd
 crtgroup
 crtshadow
 crtgshadow
+setkeylayout
+crtkeyboard
+crtlocalec
 runmkarchiso
 rmezrepo
 
